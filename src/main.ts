@@ -2,6 +2,16 @@ import "./style.css";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 
+//Step 3: Display list and observer
+interface Point {
+  xPosition: number;
+  yPosition: number;
+}
+
+interface Line {
+  points: Point[];
+}
+
 //Step 1: Initial non-interactive UI layout
 function createTitle(titleName: string) {
   const appTitle = document.createElement("h1"); //Creating title element
@@ -23,34 +33,70 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
 
   //Step 2: Simple Market Drawing
   let userIsDrawing: boolean = false;
+  const newLines: Line[] = [];
+  let currentLine: Line = { points: [] };
 
   canvas.addEventListener("mousedown", (event) => {
     userIsDrawing = true;
-    canvasContext.beginPath(); //Starts drawing
-    canvasContext.moveTo(event.offsetX, event.offsetY);
+    currentLine = {
+      points: [{ xPosition: event.offsetX, yPosition: event.offsetY }],
+    }; //Starting a new line
   });
 
   canvas.addEventListener("mousemove", (event) => {
     if (userIsDrawing === false) {
       return;
     }
-    canvasContext.lineTo(event.offsetX, event.offsetY); //Draws lines by connecting previous mouse position to the current one, lineTo() specifies where it ends
-    canvasContext.stroke(); //Rendering lines onto the canvas
+    const newPoint: Point = {
+      xPosition: event.offsetX,
+      yPosition: event.offsetY,
+    };
+    currentLine.points.push(newPoint);
+    dispatchDrawingChangedEvent();
   });
 
-  const stopDrawing = () => {
-    userIsDrawing = false;
-    canvasContext.closePath(); //Ends current drawing session
-  };
-  canvas.addEventListener("mouseout", stopDrawing);
-  canvas.addEventListener("mouseup", stopDrawing);
+  canvas.addEventListener("mouseup", dispatchLine);
+  canvas.addEventListener("mouseout", dispatchLine);
+
+  function dispatchLine() {
+    if (userIsDrawing === true) {
+      newLines.push(currentLine);
+      userIsDrawing = false;
+      currentLine = { points: [] };
+      dispatchDrawingChangedEvent();
+    }
+  }
+
+  function dispatchDrawingChangedEvent(): void {
+    const event = new CustomEvent("drawing-changed", {
+      detail: newLines,
+    });
+    canvas.dispatchEvent(event);
+  }
+
+  canvas.addEventListener("drawing-changed", (event) => {
+    const customEvent = event as CustomEvent<Line[]>;
+    canvasContext.clearRect(0, 0, canvas.width, canvas.height); //Clears the entire canvas
+    customEvent.detail.forEach((line: Line) => {
+      canvasContext.beginPath();
+      line.points.forEach((point, index) => {
+        if (index === 0) {
+          canvasContext.moveTo(point.xPosition, point.yPosition);
+        } else {
+          canvasContext.lineTo(point.xPosition, point.yPosition);
+        }
+      });
+      canvasContext.stroke();
+    });
+  });
 
   const clearButton = document.createElement("button"); //Creating Clear Button
   clearButton.textContent = "clear";
   app.appendChild(clearButton);
 
   clearButton.addEventListener("click", () => {
-    canvasContext.clearRect(0, 0, canvas.width, canvas.height); //Clears the entire canvas when clicked
+    newLines.length = 0;
+    dispatchDrawingChangedEvent();
   });
 }
 
