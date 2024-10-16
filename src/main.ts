@@ -2,14 +2,34 @@ import "./style.css";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 
+//Step 5: Display Commands
+interface Displayable {
+  display(context: CanvasRenderingContext2D): void;
+}
+
+function createDrawing(points: Point[]): Displayable {
+  return {
+    display(context: CanvasRenderingContext2D): void {
+      if (points.length < 2) {
+        return;
+      }
+      context.beginPath();
+      points.forEach((point, index) => {
+        if (index === 0) {
+          context.moveTo(point.xPosition, point.yPosition);
+        } else {
+          context.lineTo(point.xPosition, point.yPosition);
+        }
+      });
+      context.stroke();
+    },
+  };
+}
+
 //Step 3: Display list and observer
 interface Point {
   xPosition: number;
   yPosition: number;
-}
-
-interface Line {
-  points: Point[];
 }
 
 //Step 1: Initial non-interactive UI layout
@@ -31,18 +51,17 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
     return;
   }
 
-  //Step 2: Simple Market Drawing
+  //Step 2: Simple Marker Drawing
   let userIsDrawing: boolean = false;
-  const linesList: Line[] = []; //Array of all drawn lines
-  const redoStack: Line[] = [];
-  let currentLine: Line = { points: [] };
+  const displayList: Displayable[] = []; //Array of all drawn Drawings
+  const redoStack: Displayable[] = [];
+  let currentPoints: Point[] = [];
 
   canvas.addEventListener("mousedown", (event) => {
     userIsDrawing = true;
-    currentLine = {
-      points: [{ xPosition: event.offsetX, yPosition: event.offsetY }],
-    }; //Starting a new line
-    linesList.push(currentLine); //Adding current line to linesList
+    currentPoints = [{ xPosition: event.offsetX, yPosition: event.offsetY }]; //Starting a new Drawing and adding it to currentPoints list
+    const drawing = createDrawing(currentPoints); //Creating a Displayable object
+    displayList.push(drawing);
   });
 
   canvas.addEventListener("mousemove", (event) => {
@@ -53,61 +72,45 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
       xPosition: event.offsetX,
       yPosition: event.offsetY,
     };
-    currentLine.points.push(newPoint); //Adding new points to currentLine being drawn
+    currentPoints.push(newPoint); //Adding new points to currentDrawing being drawn
     dispatchDrawingChangedEvent(); //Call event to have it be drawn
   });
 
-  canvas.addEventListener("mouseup", dispatchLine);
-  canvas.addEventListener("mouseout", dispatchLine);
+  canvas.addEventListener("mouseup", dispatchDrawing);
+  canvas.addEventListener("mouseout", dispatchDrawing);
 
-  function dispatchLine() {
+  function dispatchDrawing() {
     if (userIsDrawing === true) {
-      redoStack.length = 0; //Clear redo upon new line being made
+      redoStack.length = 0; //Clear redo upon new drawing being made
       userIsDrawing = false;
-      currentLine = { points: [] }; //Reseting currentLine variable for new lines
+      currentPoints = []; //Reseting currentPoints variable for new points
       dispatchDrawingChangedEvent();
     }
   }
 
   function dispatchDrawingChangedEvent(): void {
-    const event = new CustomEvent("drawing-changed", {
-      detail: linesList,
-    });
-    canvas.dispatchEvent(event);
+    if (canvasContext) {
+      canvasContext.clearRect(0, 0, canvas.width, canvas.height); //Clears the entire canvas
+      displayList.forEach((drawing) => drawing.display(canvasContext));
+    }
   }
 
-  canvas.addEventListener("drawing-changed", (event) => {
-    const customEvent = event as CustomEvent<Line[]>;
-    canvasContext.clearRect(0, 0, canvas.width, canvas.height); //Clears the entire canvas
-    customEvent.detail.forEach((line: Line) => {
-      canvasContext.beginPath();
-      line.points.forEach((point, index) => {
-        if (index === 0) {
-          canvasContext.moveTo(point.xPosition, point.yPosition);
-        } else {
-          canvasContext.lineTo(point.xPosition, point.yPosition);
-        }
-      });
-      canvasContext.stroke();
-    });
-  });
-
   //Step 4: Undo and Redo Buttons
-  function undoLine() {
-    if (linesList.length > 0) {
-      const lastLine = linesList.pop();
-      if (lastLine != null) {
-        redoStack.push(lastLine);
+  function undoDrawing() {
+    if (displayList.length > 0) {
+      const lastDrawing = displayList.pop();
+      if (lastDrawing != null) {
+        redoStack.push(lastDrawing);
       }
       dispatchDrawingChangedEvent();
     }
   }
 
-  function redoLine() {
+  function redoDrawing() {
     if (redoStack.length > 0) {
-      const redoLine = redoStack.pop();
-      if (redoLine != null) {
-        linesList.push(redoLine);
+      const nextDrawing = redoStack.pop();
+      if (nextDrawing != null) {
+        displayList.push(nextDrawing);
       }
       dispatchDrawingChangedEvent();
     }
@@ -123,14 +126,15 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
 
   const clearButton = createButton("clear");
   clearButton.addEventListener("click", () => {
-    linesList.length = 0;
+    displayList.length = 0;
+    redoStack.length = 0;
     dispatchDrawingChangedEvent();
   });
 
   const undoButton = createButton("undo");
-  undoButton.addEventListener("click", undoLine);
+  undoButton.addEventListener("click", undoDrawing);
   const redoButton = createButton("redo");
-  redoButton.addEventListener("click", redoLine);
+  redoButton.addEventListener("click", redoDrawing);
 }
 
 createTitle("MY STICKER SKETCHPAD");
