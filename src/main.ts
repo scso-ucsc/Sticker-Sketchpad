@@ -34,6 +34,7 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
   //Step 2: Simple Market Drawing
   let userIsDrawing: boolean = false;
   const newLines: Line[] = [];
+  const redoStack: Line[] = [];
   let currentLine: Line = { points: [] };
 
   canvas.addEventListener("mousedown", (event) => {
@@ -61,6 +62,7 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
   function dispatchLine() {
     if (userIsDrawing === true) {
       newLines.push(currentLine);
+      redoStack.length = 0; //Clear redo upon new line being made
       userIsDrawing = false;
       currentLine = { points: [] };
       dispatchDrawingChangedEvent();
@@ -90,14 +92,45 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
     });
   });
 
-  const clearButton = document.createElement("button"); //Creating Clear Button
-  clearButton.textContent = "clear";
-  app.appendChild(clearButton);
+  //Step 4: Undo and Redo Buttons
+  function undoLine() {
+    if (newLines.length > 0) {
+      const lastLine = newLines.pop();
+      if (lastLine != null) {
+        redoStack.push(lastLine);
+      }
+      dispatchDrawingChangedEvent();
+    }
+  }
 
+  function redoLine() {
+    if (redoStack.length > 0) {
+      const redoLine = redoStack.pop();
+      if (redoLine != null) {
+        newLines.push(redoLine);
+      }
+      dispatchDrawingChangedEvent();
+    }
+  }
+
+  //Creating Buttons
+  function createButton(text: string) {
+    const newButton = document.createElement("button");
+    newButton.textContent = text;
+    app.appendChild(newButton);
+    return newButton;
+  }
+
+  const clearButton = createButton("clear");
   clearButton.addEventListener("click", () => {
     newLines.length = 0;
     dispatchDrawingChangedEvent();
   });
+
+  const undoButton = createButton("undo");
+  undoButton.addEventListener("click", undoLine);
+  const redoButton = createButton("redo");
+  redoButton.addEventListener("click", redoLine);
 }
 
 createTitle("MY STICKER SKETCHPAD");
