@@ -33,7 +33,7 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
 
   //Step 2: Simple Market Drawing
   let userIsDrawing: boolean = false;
-  const newLines: Line[] = [];
+  const linesList: Line[] = []; //Array of all drawn lines
   const redoStack: Line[] = [];
   let currentLine: Line = { points: [] };
 
@@ -42,6 +42,7 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
     currentLine = {
       points: [{ xPosition: event.offsetX, yPosition: event.offsetY }],
     }; //Starting a new line
+    linesList.push(currentLine); //Adding current line to linesList
   });
 
   canvas.addEventListener("mousemove", (event) => {
@@ -52,8 +53,8 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
       xPosition: event.offsetX,
       yPosition: event.offsetY,
     };
-    currentLine.points.push(newPoint);
-    dispatchDrawingChangedEvent();
+    currentLine.points.push(newPoint); //Adding new points to currentLine being drawn
+    dispatchDrawingChangedEvent(); //Call event to have it be drawn
   });
 
   canvas.addEventListener("mouseup", dispatchLine);
@@ -61,17 +62,16 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
 
   function dispatchLine() {
     if (userIsDrawing === true) {
-      newLines.push(currentLine);
       redoStack.length = 0; //Clear redo upon new line being made
       userIsDrawing = false;
-      currentLine = { points: [] };
+      currentLine = { points: [] }; //Reseting currentLine variable for new lines
       dispatchDrawingChangedEvent();
     }
   }
 
   function dispatchDrawingChangedEvent(): void {
     const event = new CustomEvent("drawing-changed", {
-      detail: newLines,
+      detail: linesList,
     });
     canvas.dispatchEvent(event);
   }
@@ -94,8 +94,8 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
 
   //Step 4: Undo and Redo Buttons
   function undoLine() {
-    if (newLines.length > 0) {
-      const lastLine = newLines.pop();
+    if (linesList.length > 0) {
+      const lastLine = linesList.pop();
       if (lastLine != null) {
         redoStack.push(lastLine);
       }
@@ -107,7 +107,7 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
     if (redoStack.length > 0) {
       const redoLine = redoStack.pop();
       if (redoLine != null) {
-        newLines.push(redoLine);
+        linesList.push(redoLine);
       }
       dispatchDrawingChangedEvent();
     }
@@ -123,7 +123,7 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
 
   const clearButton = createButton("clear");
   clearButton.addEventListener("click", () => {
-    newLines.length = 0;
+    linesList.length = 0;
     dispatchDrawingChangedEvent();
   });
 
