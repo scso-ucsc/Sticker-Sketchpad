@@ -2,6 +2,9 @@ import "./style.css";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 
+type ActionMode = "DRAWING" | "STICKER";
+let currentMode: ActionMode = "DRAWING";
+
 //Step 5: Display Commands
 interface Displayable {
   display(context: CanvasRenderingContext2D): void;
@@ -28,15 +31,14 @@ function createDrawing(points: Point[], lineThickness: number): Displayable {
 }
 
 //Step 7: Tool Preview
-interface ToolPreview {
-  draw(canvasContext: CanvasRenderingContext2D): void;
+interface ToolPreview extends Displayable {
   updatePosition(xPosition: number, yPosition: number): void;
 }
 
 function createToolPreview(thickness: number) {
   let mousePosition: { xPosition: number; yPosition: number } | null = null;
   return {
-    draw(canvasContext: CanvasRenderingContext2D): void {
+    display(canvasContext: CanvasRenderingContext2D): void {
       if (mousePosition === null) {
         return;
       }
@@ -68,6 +70,12 @@ function dispatchToolMovedEvent(xPosition: number, yPosition: number): void {
   document.dispatchEvent(event);
 }
 
+//Step 8: Multiple Stickers
+interface StickerPlacer extends Displayable {
+  updatePosition(xPosition: number, yPosition: number): void;
+  addSticker(): void;
+}
+
 //Step 3: Display list and observer
 interface Point {
   xPosition: number;
@@ -92,6 +100,7 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
     toolPreview = createToolPreview(5);
     thickButtonElement.disabled = true;
     thinButtonElement.disabled = false;
+    currentMode = "DRAWING";
   });
 
   const thinLineButton = createButton("thin", "thin");
@@ -103,10 +112,15 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
     toolPreview = createToolPreview(1);
     thickButtonElement.disabled = false;
     thinButtonElement.disabled = true;
+    currentMode = "DRAWING";
   });
 
   thickButtonElement.disabled = false;
   thinButtonElement.disabled = true;
+
+  createStickerButton("😀", "smilingSticker");
+  createStickerButton("🌈", "rainbowSticker");
+  createStickerButton("⭐", "starSticker");
 
   const canvas = document.createElement("canvas");
   canvas.id = "canvasMain"; //Adding ID so that style.css can access it
@@ -126,29 +140,34 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
   const redoStack: Displayable[] = [];
   let currentPoints: Point[] = [];
   let currentThickness = 1; //Initial Line Thickness
-  let toolPreview: ToolPreview | null = createToolPreview(1);
+  let toolPreview: (ToolPreview | StickerPlacer) | null = createToolPreview(1);
 
   canvas.addEventListener("mousedown", (event) => {
-    userIsDrawing = true;
-    currentPoints = [{ xPosition: event.offsetX, yPosition: event.offsetY }]; //Starting a new Drawing and adding it to currentPoints list
-    const drawing = createDrawing(currentPoints, currentThickness); //Creating a Displayable object
-    displayList.push(drawing);
+    if (currentMode === "DRAWING") {
+      userIsDrawing = true;
+      currentPoints = [{ xPosition: event.offsetX, yPosition: event.offsetY }]; //Starting a new Drawing and adding it to currentPoints list
+      const drawing = createDrawing(currentPoints, currentThickness); //Creating a Displayable object
+      displayList.push(drawing);
+    } else if (toolPreview && `addSticker` in toolPreview) {
+      (toolPreview as StickerPlacer).addSticker();
+      toolPreview = createToolPreview(currentThickness);
+    }
   });
 
   canvas.addEventListener("mousemove", (event) => {
-    if (toolPreview != null) {
+    if (toolPreview) {
       toolPreview.updatePosition(event.offsetX, event.offsetY);
     }
     if (userIsDrawing === false) {
       dispatchDrawingChangedEventForPreviewTool(canvasContext);
-      return;
+    } else {
+      const newPoint: Point = {
+        xPosition: event.offsetX,
+        yPosition: event.offsetY,
+      };
+      currentPoints.push(newPoint); //Adding new points to currentDrawing being drawn
+      dispatchDrawingChangedEvent(); //Call event to have it be drawn
     }
-    const newPoint: Point = {
-      xPosition: event.offsetX,
-      yPosition: event.offsetY,
-    };
-    currentPoints.push(newPoint); //Adding new points to currentDrawing being drawn
-    dispatchDrawingChangedEvent(); //Call event to have it be drawn
   });
 
   canvas.addEventListener("mouseup", dispatchDrawing);
@@ -171,8 +190,8 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
   ): void {
     context.clearRect(0, 0, canvas.width, canvas.height);
     displayList.forEach((drawing) => drawing.display(context));
-    if (toolPreview) {
-      toolPreview.draw(context);
+    if (toolPreview && `display` in toolPreview) {
+      toolPreview.display(context);
     }
   }
 
@@ -181,6 +200,53 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
       canvasContext.clearRect(0, 0, canvas.width, canvas.height); //Clears the entire canvas
       displayList.forEach((drawing) => drawing.display(canvasContext));
     }
+  }
+
+  function placeSticker(sticker: string, xPosition: number, yPosition: number) {
+    let placementPosition: { xPosition: number; yPosition: number } = {
+      xPosition,
+      yPosition,
+    };
+    return {
+      display(context: CanvasRenderingContext2D): void {
+        context.font = "24px serif";
+        context.textAlign = "center";
+        context.textBaseline = "middle";
+        context.fillStyle = "black";
+        context.fillText(
+          sticker,
+          placementPosition.xPosition,
+          placementPosition.yPosition
+        );
+        context.fillStyle = "white";
+      },
+      updatePosition(xPosition: number, yPosition: number): void {
+        placementPosition = { xPosition, yPosition };
+      },
+      addSticker(): void {
+        displayList.push(this);
+        if (canvasContext != null) {
+          currentMode = "DRAWING";
+          toolPreview = createToolPreview(currentThickness);
+          dispatchDrawingChangedEventForPreviewTool(canvasContext);
+        }
+      },
+    };
+  }
+
+  function createStickerButton(sticker: string, id: string) {
+    const newStickerButton = document.createElement("button");
+    newStickerButton.textContent = sticker;
+    newStickerButton.id = id;
+    app.appendChild(newStickerButton);
+
+    newStickerButton.addEventListener("click", () => {
+      currentMode = "STICKER";
+      toolPreview = placeSticker(sticker, -1000, -1000);
+      document.dispatchEvent(new CustomEvent("tool-moved"));
+    });
+
+    return newStickerButton;
   }
 
   //Step 4: Undo and Redo Buttons
