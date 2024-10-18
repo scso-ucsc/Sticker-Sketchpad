@@ -7,12 +7,13 @@ interface Displayable {
   display(context: CanvasRenderingContext2D): void;
 }
 
-function createDrawing(points: Point[]): Displayable {
+function createDrawing(points: Point[], lineThickness: number): Displayable {
   return {
     display(context: CanvasRenderingContext2D): void {
       if (points.length < 2) {
         return;
       }
+      context.lineWidth = lineThickness;
       context.beginPath();
       points.forEach((point, index) => {
         if (index === 0) {
@@ -40,6 +41,30 @@ function createTitle(titleName: string) {
 }
 
 function createCanvasAndButton(inputWidth: number, inputHeight: number) {
+  //Step 6: Multiple Markers
+  const thickLineButton = createButton("THICK", "thick");
+  const thickButtonElement = document.getElementById(
+    "thick"
+  ) as HTMLButtonElement;
+  thickLineButton.addEventListener("click", () => {
+    currentThickness = 5;
+    thickButtonElement.disabled = true;
+    thinButtonElement.disabled = false;
+  });
+
+  const thinLineButton = createButton("thin", "thin");
+  const thinButtonElement = document.getElementById(
+    "thin"
+  ) as HTMLButtonElement;
+  thinLineButton.addEventListener("click", () => {
+    currentThickness = 1;
+    thickButtonElement.disabled = false;
+    thinButtonElement.disabled = true;
+  });
+
+  thickButtonElement.disabled = false;
+  thinButtonElement.disabled = true;
+
   const canvas = document.createElement("canvas");
   canvas.id = "canvasMain"; //Adding ID so that style.css can access it
   canvas.width = inputWidth;
@@ -56,11 +81,12 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
   const displayList: Displayable[] = []; //Array of all drawn Drawings
   const redoStack: Displayable[] = [];
   let currentPoints: Point[] = [];
+  let currentThickness = 1; //Initial Line Thickness
 
   canvas.addEventListener("mousedown", (event) => {
     userIsDrawing = true;
     currentPoints = [{ xPosition: event.offsetX, yPosition: event.offsetY }]; //Starting a new Drawing and adding it to currentPoints list
-    const drawing = createDrawing(currentPoints); //Creating a Displayable object
+    const drawing = createDrawing(currentPoints, currentThickness); //Creating a Displayable object
     displayList.push(drawing);
   });
 
@@ -116,25 +142,25 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
     }
   }
 
-  //Creating Buttons
-  function createButton(text: string) {
-    const newButton = document.createElement("button");
-    newButton.textContent = text;
-    app.appendChild(newButton);
-    return newButton;
-  }
-
-  const clearButton = createButton("clear");
+  const clearButton = createButton("clear", "clear");
   clearButton.addEventListener("click", () => {
     displayList.length = 0;
     redoStack.length = 0;
     dispatchDrawingChangedEvent();
   });
 
-  const undoButton = createButton("undo");
+  const undoButton = createButton("undo", "undo");
   undoButton.addEventListener("click", undoDrawing);
-  const redoButton = createButton("redo");
+  const redoButton = createButton("redo", "redo");
   redoButton.addEventListener("click", redoDrawing);
+}
+
+function createButton(text: string, idName: string) {
+  const newButton = document.createElement("button");
+  newButton.textContent = text;
+  newButton.id = idName;
+  app.appendChild(newButton);
+  return newButton;
 }
 
 createTitle("MY STICKER SKETCHPAD");
