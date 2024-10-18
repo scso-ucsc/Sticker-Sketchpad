@@ -27,6 +27,47 @@ function createDrawing(points: Point[], lineThickness: number): Displayable {
   };
 }
 
+//Step 7: Tool Preview
+interface ToolPreview {
+  draw(canvasContext: CanvasRenderingContext2D): void;
+  updatePosition(xPosition: number, yPosition: number): void;
+}
+
+function createToolPreview(thickness: number) {
+  let mousePosition: { xPosition: number; yPosition: number } | null = null;
+  return {
+    draw(canvasContext: CanvasRenderingContext2D): void {
+      if (mousePosition === null) {
+        return;
+      }
+      canvasContext.beginPath();
+      canvasContext.arc(
+        mousePosition.xPosition,
+        mousePosition.yPosition,
+        thickness / 2,
+        0,
+        Math.PI * 2
+      );
+      canvasContext.fillStyle = "rgba(150, 150, 150, 0.5)";
+      canvasContext.fill();
+      canvasContext.strokeStyle = "black";
+      canvasContext.stroke();
+    },
+
+    updatePosition(xPosition: number, yPosition: number) {
+      mousePosition = { xPosition, yPosition };
+      dispatchToolMovedEvent(xPosition, yPosition);
+    },
+  };
+}
+
+function dispatchToolMovedEvent(xPosition: number, yPosition: number): void {
+  const event = new CustomEvent("tool-moved", {
+    detail: { xPosition, yPosition },
+  });
+  document.dispatchEvent(event);
+}
+
 //Step 3: Display list and observer
 interface Point {
   xPosition: number;
@@ -48,6 +89,7 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
   ) as HTMLButtonElement;
   thickLineButton.addEventListener("click", () => {
     currentThickness = 5;
+    toolPreview = createToolPreview(5);
     thickButtonElement.disabled = true;
     thinButtonElement.disabled = false;
   });
@@ -58,6 +100,7 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
   ) as HTMLButtonElement;
   thinLineButton.addEventListener("click", () => {
     currentThickness = 1;
+    toolPreview = createToolPreview(1);
     thickButtonElement.disabled = false;
     thinButtonElement.disabled = true;
   });
@@ -69,6 +112,7 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
   canvas.id = "canvasMain"; //Adding ID so that style.css can access it
   canvas.width = inputWidth;
   canvas.height = inputHeight;
+  canvas.style.cursor = "none";
   app.appendChild(canvas);
 
   const canvasContext = canvas.getContext("2d"); //2D Context is what is used to perform actual drawing operations
@@ -82,6 +126,7 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
   const redoStack: Displayable[] = [];
   let currentPoints: Point[] = [];
   let currentThickness = 1; //Initial Line Thickness
+  let toolPreview: ToolPreview | null = createToolPreview(1);
 
   canvas.addEventListener("mousedown", (event) => {
     userIsDrawing = true;
@@ -91,7 +136,11 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
   });
 
   canvas.addEventListener("mousemove", (event) => {
+    if (toolPreview != null) {
+      toolPreview.updatePosition(event.offsetX, event.offsetY);
+    }
     if (userIsDrawing === false) {
+      dispatchDrawingChangedEventForPreviewTool(canvasContext);
       return;
     }
     const newPoint: Point = {
@@ -110,7 +159,20 @@ function createCanvasAndButton(inputWidth: number, inputHeight: number) {
       redoStack.length = 0; //Clear redo upon new drawing being made
       userIsDrawing = false;
       currentPoints = []; //Reseting currentPoints variable for new points
+      if (toolPreview) {
+        toolPreview.updatePosition(-1000, -1000);
+      }
       dispatchDrawingChangedEvent();
+    }
+  }
+
+  function dispatchDrawingChangedEventForPreviewTool(
+    context: CanvasRenderingContext2D
+  ): void {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    displayList.forEach((drawing) => drawing.display(context));
+    if (toolPreview) {
+      toolPreview.draw(context);
     }
   }
 
@@ -162,6 +224,16 @@ function createButton(text: string, idName: string) {
   app.appendChild(newButton);
   return newButton;
 }
+
+document.addEventListener("tool-moved", (event) => {
+  const customEvent = event as CustomEvent<{
+    xPosition: number;
+    yPosition: number;
+  }>;
+  console.log(
+    `${customEvent.detail.xPosition}, ${customEvent.detail.yPosition}`
+  );
+});
 
 createTitle("MY STICKER SKETCHPAD");
 createCanvasAndButton(256, 256); //Creating a 256 x 256 canvas
