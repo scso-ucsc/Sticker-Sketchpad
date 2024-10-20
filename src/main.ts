@@ -291,15 +291,5 @@ function createButton(text: string, idName: string) {
   return newButton;
 }
 
-document.addEventListener("tool-moved", (event) => {
-  const customEvent = event as CustomEvent<{
-    xPosition: number;
-    yPosition: number;
-  }>;
-  console.log(
-    `${customEvent.detail.xPosition}, ${customEvent.detail.yPosition}`
-  );
-});
-
 createTitle("MY STICKER SKETCHPAD");
 createCanvasAndButton(256, 256); //Creating a 256 x 256 canvas
