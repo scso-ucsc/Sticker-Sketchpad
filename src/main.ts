@@ -129,6 +129,7 @@ function createCanvasAndButtons(inputWidth: number, inputHeight: number) {
 
   setupClearButton(canvasContext, displayList, redoStack);
   setupUndoAndRedoButtons(canvasContext, displayList, redoStack);
+  setupExportButton(displayList);
   setupDrawModeButtons();
 
   app.appendChild(canvas);
@@ -178,6 +179,33 @@ function setupUndoAndRedoButtons(
   createButton("Redo", "redo", () =>
     redoDrawing(context, displayList, redoStack)
   );
+}
+
+function setupExportButton(displayList: Displayable[]) {
+  createButton("Export", "export", () => exportCanvas(displayList));
+}
+
+function exportCanvas(displayList: Displayable[]) {
+  const canvasToExport = document.createElement("canvas");
+  canvasToExport.width = 1024;
+  canvasToExport.height = 1024;
+  const exportContext = canvasToExport.getContext("2d");
+
+  if (exportContext === null) {
+    return;
+  }
+
+  exportContext.scale(4, 4); //Scaling up drawing due to larger canvas size
+  displayList.forEach((drawing) => drawing.display(exportContext));
+
+  const dataURL = canvasToExport.toDataURL("image/png");
+
+  const downloadLink = document.createElement("a");
+  downloadLink.href = dataURL;
+  downloadLink.download = "drawing.png";
+  document.body.appendChild(downloadLink);
+  downloadLink.click();
+  document.body.removeChild(downloadLink);
 }
 
 function createDrawing(points: Point[], lineThickness: number): Displayable {
