@@ -4,10 +4,180 @@ const app = document.querySelector<HTMLDivElement>("#app")!;
 
 type ActionMode = "DRAWING" | "STICKER";
 let currentMode: ActionMode = "DRAWING";
+let currentThickness = 1;
 
-//Step 5: Display Commands
+//Interface Definitions
 interface Displayable {
   display(context: CanvasRenderingContext2D): void;
+}
+
+interface ToolPreview extends Displayable {
+  updatePosition(xPosition: number, yPosition: number): void;
+}
+
+interface StickerPlacer extends Displayable {
+  updatePosition(xPosition: number, yPosition: number): void;
+  addSticker(): void;
+}
+
+interface Point {
+  xPosition: number;
+  yPosition: number;
+}
+
+let toolPreview: (ToolPreview | StickerPlacer) | null =
+  createToolPreview(currentThickness);
+const stickers = ["😀", "🌈", "⭐"];
+
+function createTitle(titleName: string) {
+  const appTitle = document.createElement("h1"); //Creating title element
+  appTitle.textContent = titleName;
+  app.appendChild(appTitle);
+}
+
+function createButton(text: string, idName: string, onClick: () => void) {
+  const newButton = document.createElement("button");
+  newButton.textContent = text;
+  newButton.id = idName;
+  newButton.addEventListener("click", onClick);
+  app.appendChild(newButton);
+  return newButton;
+}
+
+function createStickerButton(
+  sticker: string,
+  displayList: Displayable[],
+  context: CanvasRenderingContext2D
+) {
+  createButton(sticker, "", () => {
+    currentMode = "STICKER";
+    toolPreview = placeSticker(sticker, -1000, -1000, displayList, context);
+    dispatchToolMovedEvent(-1000, -1000);
+  });
+}
+
+function placeSticker(
+  sticker: string,
+  xPosition: number,
+  yPosition: number,
+  displayList: Displayable[],
+  context: CanvasRenderingContext2D
+): StickerPlacer {
+  let placementPosition: { xPosition: number; yPosition: number } = {
+    xPosition,
+    yPosition,
+  };
+  return {
+    display(context: CanvasRenderingContext2D): void {
+      context.font = "24px serif";
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillStyle = "black";
+      context.fillText(
+        sticker,
+        placementPosition.xPosition,
+        placementPosition.yPosition
+      );
+    },
+    updatePosition(xPosition: number, yPosition: number): void {
+      placementPosition = { xPosition, yPosition };
+    },
+    addSticker(): void {
+      displayList.push(this);
+      dispatchDrawingChangedEvent(context, displayList);
+      resetToolPreview();
+    },
+  };
+}
+
+function resetToolPreview() {
+  currentMode = "DRAWING";
+  toolPreview = createToolPreview(currentThickness);
+}
+
+function setupStickers(
+  displayList: Displayable[],
+  context: CanvasRenderingContext2D
+) {
+  createButton("Add Custom Sticker", "addCustomSticker", () => {
+    const newSticker = prompt("Enter custom sticker: ", "");
+    if (newSticker != null) {
+      stickers.push(newSticker);
+      createStickerButton(newSticker, displayList, context);
+    }
+  });
+  stickers.forEach((sticker) =>
+    createStickerButton(sticker, displayList, context)
+  );
+}
+
+function createCanvasAndButtons(inputWidth: number, inputHeight: number) {
+  const userIsDrawing: boolean = false;
+  const displayList: Displayable[] = []; //Array of all drawn Drawings
+  const redoStack: Displayable[] = [];
+  const currentPoints: Point[] = [];
+
+  const canvas = document.createElement("canvas");
+  canvas.id = "canvasMain"; //Adding ID so that style.css can access it
+  canvas.width = inputWidth;
+  canvas.height = inputHeight;
+  canvas.style.cursor = "none";
+  const canvasContext = canvas.getContext("2d"); //2D Context is what is used to perform actual drawing operations
+  if (canvasContext === null) {
+    return;
+  }
+
+  setupClearButton(canvasContext, displayList, redoStack);
+  setupUndoAndRedoButtons(canvasContext, displayList, redoStack);
+  setupDrawModeButtons();
+
+  app.appendChild(canvas);
+
+  setupStickers(displayList, canvasContext);
+  setupCanvasEventHandlers(
+    canvas,
+    canvasContext,
+    currentPoints,
+    displayList,
+    redoStack,
+    userIsDrawing
+  );
+}
+
+function setupDrawModeButtons() {
+  createButton("THICK", "thick", () => {
+    currentThickness = 5;
+    toolPreview = createToolPreview(5);
+    currentMode = "DRAWING";
+  });
+  createButton("thin", "thin", () => {
+    currentThickness = 1;
+    toolPreview = createToolPreview(1);
+    currentMode = "DRAWING";
+  });
+}
+
+function setupClearButton(
+  context: CanvasRenderingContext2D,
+  displayList: Displayable[],
+  redoStack: Displayable[]
+) {
+  createButton("Clear", "clear", () =>
+    clearCanvas(context, displayList, redoStack)
+  );
+}
+
+function setupUndoAndRedoButtons(
+  context: CanvasRenderingContext2D,
+  displayList: Displayable[],
+  redoStack: Displayable[]
+) {
+  createButton("Undo", "undo", () =>
+    undoDrawing(context, displayList, redoStack)
+  );
+  createButton("Redo", "redo", () =>
+    redoDrawing(context, displayList, redoStack)
+  );
 }
 
 function createDrawing(points: Point[], lineThickness: number): Displayable {
@@ -30,13 +200,8 @@ function createDrawing(points: Point[], lineThickness: number): Displayable {
   };
 }
 
-//Step 7: Tool Preview
-interface ToolPreview extends Displayable {
-  updatePosition(xPosition: number, yPosition: number): void;
-}
-
 function createToolPreview(thickness: number) {
-  let mousePosition: { xPosition: number; yPosition: number } | null = null;
+  let mousePosition: Point | null = null;
   return {
     display(canvasContext: CanvasRenderingContext2D): void {
       if (mousePosition === null) {
@@ -55,7 +220,6 @@ function createToolPreview(thickness: number) {
       canvasContext.strokeStyle = "black";
       canvasContext.stroke();
     },
-
     updatePosition(xPosition: number, yPosition: number) {
       mousePosition = { xPosition, yPosition };
       dispatchToolMovedEvent(xPosition, yPosition);
@@ -70,226 +234,117 @@ function dispatchToolMovedEvent(xPosition: number, yPosition: number): void {
   document.dispatchEvent(event);
 }
 
-//Step 8: Multiple Stickers
-interface StickerPlacer extends Displayable {
-  updatePosition(xPosition: number, yPosition: number): void;
-  addSticker(): void;
-}
-
-//Step 3: Display list and observer
-interface Point {
-  xPosition: number;
-  yPosition: number;
-}
-
-//Step 1: Initial non-interactive UI layout
-function createTitle(titleName: string) {
-  const appTitle = document.createElement("h1"); //Creating title element
-  appTitle.textContent = titleName;
-  app.appendChild(appTitle);
-}
-
-function createCanvasAndButton(inputWidth: number, inputHeight: number) {
-  //Step 6: Multiple Markers
-  const thickLineButton = createButton("THICK", "thick");
-  const thickButtonElement = document.getElementById(
-    "thick"
-  ) as HTMLButtonElement;
-  thickLineButton.addEventListener("click", () => {
-    currentThickness = 5;
-    toolPreview = createToolPreview(5);
-    thickButtonElement.disabled = true;
-    thinButtonElement.disabled = false;
-    currentMode = "DRAWING";
-  });
-
-  const thinLineButton = createButton("thin", "thin");
-  const thinButtonElement = document.getElementById(
-    "thin"
-  ) as HTMLButtonElement;
-  thinLineButton.addEventListener("click", () => {
-    currentThickness = 1;
-    toolPreview = createToolPreview(1);
-    thickButtonElement.disabled = false;
-    thinButtonElement.disabled = true;
-    currentMode = "DRAWING";
-  });
-
-  thickButtonElement.disabled = false;
-  thinButtonElement.disabled = true;
-
-  createStickerButton("😀", "smilingSticker");
-  createStickerButton("🌈", "rainbowSticker");
-  createStickerButton("⭐", "starSticker");
-
-  const canvas = document.createElement("canvas");
-  canvas.id = "canvasMain"; //Adding ID so that style.css can access it
-  canvas.width = inputWidth;
-  canvas.height = inputHeight;
-  canvas.style.cursor = "none";
-  app.appendChild(canvas);
-
-  const canvasContext = canvas.getContext("2d"); //2D Context is what is used to perform actual drawing operations
-  if (canvasContext === null) {
-    return;
-  }
-
-  //Step 2: Simple Marker Drawing
-  let userIsDrawing: boolean = false;
-  const displayList: Displayable[] = []; //Array of all drawn Drawings
-  const redoStack: Displayable[] = [];
-  let currentPoints: Point[] = [];
-  let currentThickness = 1; //Initial Line Thickness
-  let toolPreview: (ToolPreview | StickerPlacer) | null = createToolPreview(1);
-
+function setupCanvasEventHandlers(
+  canvas: HTMLCanvasElement,
+  canvasContext: CanvasRenderingContext2D,
+  currentPoints: Point[],
+  displayList: Displayable[],
+  redoStack: Displayable[],
+  userIsDrawing: boolean
+) {
   canvas.addEventListener("mousedown", (event) => {
-    if (currentMode === "DRAWING") {
+    if (
+      currentMode === "STICKER" &&
+      toolPreview &&
+      `addSticker` in toolPreview
+    ) {
+      toolPreview.addSticker();
+    } else if (currentMode === "DRAWING") {
       userIsDrawing = true;
-      currentPoints = [{ xPosition: event.offsetX, yPosition: event.offsetY }]; //Starting a new Drawing and adding it to currentPoints list
-      const drawing = createDrawing(currentPoints, currentThickness); //Creating a Displayable object
-      displayList.push(drawing);
-    } else if (toolPreview && `addSticker` in toolPreview) {
-      (toolPreview as StickerPlacer).addSticker();
-      toolPreview = createToolPreview(currentThickness);
+      currentPoints = [{ xPosition: event.offsetX, yPosition: event.offsetY }];
     }
   });
 
   canvas.addEventListener("mousemove", (event) => {
     if (toolPreview) {
       toolPreview.updatePosition(event.offsetX, event.offsetY);
-    }
-    if (userIsDrawing === false) {
-      dispatchDrawingChangedEventForPreviewTool(canvasContext);
-    } else {
-      const newPoint: Point = {
-        xPosition: event.offsetX,
-        yPosition: event.offsetY,
-      };
-      currentPoints.push(newPoint); //Adding new points to currentDrawing being drawn
-      dispatchDrawingChangedEvent(); //Call event to have it be drawn
+      if (currentMode === "DRAWING" && userIsDrawing) {
+        const newPoint: Point = {
+          xPosition: event.offsetX,
+          yPosition: event.offsetY,
+        };
+        currentPoints.push(newPoint);
+        canvasContext.clearRect(0, 0, canvas.width, canvas.height);
+        displayList.forEach((drawing) => drawing.display(canvasContext));
+        const currentDrawing = createDrawing(currentPoints, currentThickness);
+        currentDrawing.display(canvasContext);
+      } else {
+        dispatchDrawingChangedEventForPreviewTool(canvasContext, displayList);
+      }
     }
   });
 
-  canvas.addEventListener("mouseup", dispatchDrawing);
-  canvas.addEventListener("mouseout", dispatchDrawing);
+  canvas.addEventListener("mouseup", () => stopDrawing());
+  canvas.addEventListener("mouseout", () => stopDrawing());
 
-  function dispatchDrawing() {
+  function stopDrawing() {
     if (userIsDrawing === true) {
-      redoStack.length = 0; //Clear redo upon new drawing being made
+      redoStack.length = 0;
       userIsDrawing = false;
-      currentPoints = []; //Reseting currentPoints variable for new points
-      if (toolPreview) {
-        toolPreview.updatePosition(-1000, -1000);
-      }
-      dispatchDrawingChangedEvent();
+      const drawLine = createDrawing([...currentPoints], currentThickness);
+      displayList.push(drawLine);
+      currentPoints.length = 0;
     }
+    dispatchDrawingChangedEvent(canvasContext, displayList);
   }
-
-  function dispatchDrawingChangedEventForPreviewTool(
-    context: CanvasRenderingContext2D
-  ): void {
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    displayList.forEach((drawing) => drawing.display(context));
-    if (toolPreview && `display` in toolPreview) {
-      toolPreview.display(context);
-    }
-  }
-
-  function dispatchDrawingChangedEvent(): void {
-    if (canvasContext) {
-      canvasContext.clearRect(0, 0, canvas.width, canvas.height); //Clears the entire canvas
-      displayList.forEach((drawing) => drawing.display(canvasContext));
-    }
-  }
-
-  function placeSticker(sticker: string, xPosition: number, yPosition: number) {
-    let placementPosition: { xPosition: number; yPosition: number } = {
-      xPosition,
-      yPosition,
-    };
-    return {
-      display(context: CanvasRenderingContext2D): void {
-        context.font = "24px serif";
-        context.textAlign = "center";
-        context.textBaseline = "middle";
-        context.fillStyle = "black";
-        context.fillText(
-          sticker,
-          placementPosition.xPosition,
-          placementPosition.yPosition
-        );
-        context.fillStyle = "white";
-      },
-      updatePosition(xPosition: number, yPosition: number): void {
-        placementPosition = { xPosition, yPosition };
-      },
-      addSticker(): void {
-        displayList.push(this);
-        if (canvasContext != null) {
-          currentMode = "DRAWING";
-          toolPreview = createToolPreview(currentThickness);
-          dispatchDrawingChangedEventForPreviewTool(canvasContext);
-        }
-      },
-    };
-  }
-
-  function createStickerButton(sticker: string, id: string) {
-    const newStickerButton = document.createElement("button");
-    newStickerButton.textContent = sticker;
-    newStickerButton.id = id;
-    app.appendChild(newStickerButton);
-
-    newStickerButton.addEventListener("click", () => {
-      currentMode = "STICKER";
-      toolPreview = placeSticker(sticker, -1000, -1000);
-      document.dispatchEvent(new CustomEvent("tool-moved"));
-    });
-
-    return newStickerButton;
-  }
-
-  //Step 4: Undo and Redo Buttons
-  function undoDrawing() {
-    if (displayList.length > 0) {
-      const lastDrawing = displayList.pop();
-      if (lastDrawing != null) {
-        redoStack.push(lastDrawing);
-      }
-      dispatchDrawingChangedEvent();
-    }
-  }
-
-  function redoDrawing() {
-    if (redoStack.length > 0) {
-      const nextDrawing = redoStack.pop();
-      if (nextDrawing != null) {
-        displayList.push(nextDrawing);
-      }
-      dispatchDrawingChangedEvent();
-    }
-  }
-
-  const clearButton = createButton("clear", "clear");
-  clearButton.addEventListener("click", () => {
-    displayList.length = 0;
-    redoStack.length = 0;
-    dispatchDrawingChangedEvent();
-  });
-
-  const undoButton = createButton("undo", "undo");
-  undoButton.addEventListener("click", undoDrawing);
-  const redoButton = createButton("redo", "redo");
-  redoButton.addEventListener("click", redoDrawing);
 }
 
-function createButton(text: string, idName: string) {
-  const newButton = document.createElement("button");
-  newButton.textContent = text;
-  newButton.id = idName;
-  app.appendChild(newButton);
-  return newButton;
+function dispatchDrawingChangedEventForPreviewTool(
+  context: CanvasRenderingContext2D,
+  displayList: Displayable[]
+): void {
+  context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+  displayList.forEach((drawing) => drawing.display(context));
+  if (toolPreview && `display` in toolPreview) {
+    toolPreview.display(context);
+  }
+}
+
+function dispatchDrawingChangedEvent(
+  context: CanvasRenderingContext2D,
+  displayList: Displayable[]
+): void {
+  context.clearRect(0, 0, context.canvas.width, context.canvas.height); //Clears the entire canvas
+  displayList.forEach((drawing) => drawing.display(context));
+}
+
+function clearCanvas(
+  context: CanvasRenderingContext2D,
+  displayList: Displayable[],
+  redoStack: Displayable[]
+) {
+  displayList.length = 0;
+  redoStack.length = 0;
+  dispatchDrawingChangedEvent(context, displayList);
+}
+
+function undoDrawing(
+  context: CanvasRenderingContext2D,
+  displayList: Displayable[],
+  redoStack: Displayable[]
+) {
+  if (displayList.length > 0) {
+    const lastDrawing = displayList.pop();
+    if (lastDrawing != null) {
+      redoStack.push(lastDrawing);
+    }
+    dispatchDrawingChangedEvent(context, displayList);
+  }
+}
+
+function redoDrawing(
+  context: CanvasRenderingContext2D,
+  displayList: Displayable[],
+  redoStack: Displayable[]
+) {
+  if (redoStack.length > 0) {
+    const nextDrawing = redoStack.pop();
+    if (nextDrawing != null) {
+      displayList.push(nextDrawing);
+    }
+    dispatchDrawingChangedEvent(context, displayList);
+  }
 }
 
 createTitle("MY STICKER SKETCHPAD");
-createCanvasAndButton(256, 256); //Creating a 256 x 256 canvas
+createCanvasAndButtons(256, 256); //Creating a 256 x 256 canvas
