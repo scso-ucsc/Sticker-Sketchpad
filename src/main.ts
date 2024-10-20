@@ -146,16 +146,23 @@ function createCanvasAndButtons(inputWidth: number, inputHeight: number) {
 }
 
 function setupDrawModeButtons() {
-  createButton("THICK", "thick", () => {
+  const markerButton = createButton("Marker", "marker", () => {
     currentThickness = 5;
     toolPreview = createToolPreview(5);
     currentMode = "DRAWING";
+    markerButton.disabled = true;
+    pencilButton.disabled = false;
   });
-  createButton("thin", "thin", () => {
+  const pencilButton = createButton("Pencil", "pencil", () => {
     currentThickness = 1;
     toolPreview = createToolPreview(1);
     currentMode = "DRAWING";
+    markerButton.disabled = false;
+    pencilButton.disabled = true;
   });
+
+  markerButton.disabled = false;
+  pencilButton.disabled = true;
 }
 
 function setupClearButton(
