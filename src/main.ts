@@ -51,7 +51,17 @@ function createStickerButton(
 ) {
   createButton(sticker, "", () => {
     currentMode = "STICKER";
-    toolPreview = placeSticker(sticker, -1000, -1000, displayList, context);
+    const rotation: number = getRandomRotationValue();
+    toolPreview = createStickerPreview(rotation);
+    const stickerPlacer = placeSticker(
+      sticker,
+      -1000,
+      -1000,
+      rotation,
+      displayList,
+      context
+    );
+    toolPreview = stickerPlacer;
     dispatchToolMovedEvent(-1000, -1000);
   });
 }
@@ -60,6 +70,7 @@ function placeSticker(
   sticker: string,
   xPosition: number,
   yPosition: number,
+  rotation: number,
   displayList: Displayable[],
   context: CanvasRenderingContext2D
 ): StickerPlacer {
@@ -69,15 +80,18 @@ function placeSticker(
   };
   return {
     display(context: CanvasRenderingContext2D): void {
+      context.save();
+      context.translate(
+        placementPosition.xPosition,
+        placementPosition.yPosition
+      );
+      context.rotate(rotation);
       context.font = "24px serif";
       context.textAlign = "center";
       context.textBaseline = "middle";
       context.fillStyle = "black";
-      context.fillText(
-        sticker,
-        placementPosition.xPosition,
-        placementPosition.yPosition
-      );
+      context.fillText(sticker, 0, 0);
+      context.restore();
     },
     updatePosition(xPosition: number, yPosition: number): void {
       placementPosition = { xPosition, yPosition };
@@ -88,6 +102,31 @@ function placeSticker(
       resetToolPreview();
     },
   };
+}
+
+function createStickerPreview(rotation: number): ToolPreview {
+  let mousePosition: Point | null = null;
+  return {
+    display(context: CanvasRenderingContext2D): void {
+      if (mousePosition === null) {
+        return;
+      }
+      context.save();
+      context.translate(mousePosition.xPosition, mousePosition.yPosition);
+      context.rotate(rotation);
+      context.strokeStyle = "black";
+      context.strokeRect(-12, -12, 24, 24);
+      context.restore();
+    },
+    updatePosition(xPosition: number, yPosition: number): void {
+      mousePosition = { xPosition, yPosition };
+      dispatchToolMovedEvent(xPosition, yPosition);
+    },
+  };
+}
+
+function getRandomRotationValue(): number {
+  return Math.random() * Math.PI * 2;
 }
 
 function resetToolPreview() {
@@ -146,7 +185,7 @@ function createCanvasAndButtons(inputWidth: number, inputHeight: number) {
 }
 
 function setupDrawModeButtons() {
-  const markerButton = createButton("Marker", "marker", () => {
+  const markerButton = createButton("Red Marker", "marker", () => {
     currentThickness = 5;
     toolPreview = createToolPreview(5);
     currentMode = "DRAWING";
@@ -221,6 +260,13 @@ function createDrawing(points: Point[], lineThickness: number): Displayable {
       if (points.length < 2) {
         return;
       }
+
+      if (lineThickness > 1) {
+        context.strokeStyle = "red";
+      } else {
+        context.strokeStyle = "black";
+      }
+
       context.lineWidth = lineThickness;
       context.beginPath();
       points.forEach((point, index) => {
@@ -250,9 +296,15 @@ function createToolPreview(thickness: number) {
         0,
         Math.PI * 2
       );
+
+      if (thickness > 1) {
+        canvasContext.strokeStyle = "red";
+      } else {
+        canvasContext.strokeStyle = "black";
+      }
+
       canvasContext.fillStyle = "rgba(150, 150, 150, 0.5)";
       canvasContext.fill();
-      canvasContext.strokeStyle = "black";
       canvasContext.stroke();
     },
     updatePosition(xPosition: number, yPosition: number) {
