@@ -150,6 +150,41 @@ function setupStickers(
   );
 }
 
+// adding generic button setup fnc
+function setUpButton(
+  text: string,
+  id: string,
+  parentElement: HTMLElement,
+  onClick: () => void
+) {
+  const button = document.createElement("button");
+  button.textContent = text;
+  button.id = id;
+  button.addEventListener("click", onClick);
+  parentElement.appendChild(button);
+  return button;
+}
+
+function setUpButtons(
+  context: CanvasRenderingContext2D,
+  displayList: Displayable[],
+  redoStack: Displayable[]
+) {
+  setUpButton("Clear", "clear", app, () =>
+    clearCanvas(context, displayList, redoStack)
+  );
+
+  setUpButton("Undo", "undo", app, () =>
+    undoDrawing(context, displayList, redoStack)
+  );
+
+  setUpButton("Redo", "redo", app, () =>
+    redoDrawing(context, displayList, redoStack)
+  );
+
+  setUpButton("Export", "export", app, () => exportCanvas(displayList));
+}
+
 function createCanvasAndButtons(inputWidth: number, inputHeight: number) {
   const userIsDrawing: boolean = false;
   const displayList: Displayable[] = []; //Array of all drawn Drawings
@@ -166,13 +201,9 @@ function createCanvasAndButtons(inputWidth: number, inputHeight: number) {
     return;
   }
 
-  app.appendChild(canvas); 
-
-  setupClearButton(canvasContext, displayList, redoStack);
-  setupUndoAndRedoButtons(canvasContext, displayList, redoStack);
-  setupExportButton(displayList);
+  app.appendChild(canvas);
+  setUpButtons(canvasContext, displayList, redoStack);
   setupDrawModeButtons();
-
   setupStickers(displayList, canvasContext);
   setupCanvasEventHandlers(
     canvas,
@@ -202,33 +233,6 @@ function setupDrawModeButtons() {
 
   markerButton.disabled = false;
   pencilButton.disabled = true;
-}
-
-function setupClearButton(
-  context: CanvasRenderingContext2D,
-  displayList: Displayable[],
-  redoStack: Displayable[]
-) {
-  createButton("Clear", "clear", () =>
-    clearCanvas(context, displayList, redoStack)
-  );
-}
-
-function setupUndoAndRedoButtons(
-  context: CanvasRenderingContext2D,
-  displayList: Displayable[],
-  redoStack: Displayable[]
-) {
-  createButton("Undo", "undo", () =>
-    undoDrawing(context, displayList, redoStack)
-  );
-  createButton("Redo", "redo", () =>
-    redoDrawing(context, displayList, redoStack)
-  );
-}
-
-function setupExportButton(displayList: Displayable[]) {
-  createButton("Export", "export", () => exportCanvas(displayList));
 }
 
 function exportCanvas(displayList: Displayable[]) {
