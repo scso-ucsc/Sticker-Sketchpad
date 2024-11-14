@@ -166,12 +166,12 @@ function createCanvasAndButtons(inputWidth: number, inputHeight: number) {
     return;
   }
 
+  app.appendChild(canvas); 
+
   setupClearButton(canvasContext, displayList, redoStack);
   setupUndoAndRedoButtons(canvasContext, displayList, redoStack);
   setupExportButton(displayList);
   setupDrawModeButtons();
-
-  app.appendChild(canvas);
 
   setupStickers(displayList, canvasContext);
   setupCanvasEventHandlers(
